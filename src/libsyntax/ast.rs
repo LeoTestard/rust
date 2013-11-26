@@ -17,6 +17,7 @@ use parse::token::{interner_get, str_to_ident};
 
 use std::hashmap::HashMap;
 use std::option::Option;
+use std::rc::Rc;
 use std::to_str::ToStr;
 use extra::serialize::{Encodable, Decodable, Encoder, Decoder};
 
@@ -474,7 +475,7 @@ pub enum Decl_ {
 pub struct Arm {
     pats: ~[@Pat],
     guard: Option<@Expr>,
-    body: Block,
+    body: Rc<Block>,
 }
 
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
@@ -536,18 +537,18 @@ pub enum Expr_ {
     ExprUnary(NodeId, UnOp, @Expr),
     ExprLit(@lit),
     ExprCast(@Expr, Ty),
-    ExprIf(@Expr, Block, Option<@Expr>),
-    ExprWhile(@Expr, Block),
+    ExprIf(@Expr, Rc<Block>, Option<@Expr>),
+    ExprWhile(@Expr, Rc<Block>),
     // FIXME #6993: change to Option<Name>
-    ExprForLoop(@Pat, @Expr, Block, Option<Ident>),
+    ExprForLoop(@Pat, @Expr, Rc<Block>, Option<Ident>),
     // Conditionless loop (can be exited with break, cont, or ret)
     // FIXME #6993: change to Option<Name>
-    ExprLoop(Block, Option<Ident>),
+    ExprLoop(Rc<Block>, Option<Ident>),
     ExprMatch(@Expr, ~[Arm]),
-    ExprFnBlock(fn_decl, Block),
-    ExprProc(fn_decl, Block),
+    ExprFnBlock(fn_decl, Rc<Block>),
+    ExprProc(fn_decl, Rc<Block>),
     ExprDoBody(@Expr),
-    ExprBlock(Block),
+    ExprBlock(Rc<Block>),
 
     ExprAssign(@Expr, @Expr),
     ExprAssignOp(NodeId, BinOp, @Expr, @Expr),
@@ -745,7 +746,7 @@ pub struct TypeMethod {
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
 pub enum trait_method {
     required(TypeMethod),
-    provided(@method),
+    provided(@Method),
 }
 
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
@@ -937,14 +938,14 @@ pub enum explicit_self_ {
 pub type explicit_self = Spanned<explicit_self_>;
 
 #[deriving(Eq, Encodable, Decodable,IterBytes)]
-pub struct method {
+pub struct Method {
     ident: Ident,
     attrs: ~[Attribute],
     generics: Generics,
     explicit_self: explicit_self,
     purity: purity,
     decl: fn_decl,
-    body: Block,
+    body: Rc<Block>,
     id: NodeId,
     span: Span,
     self_id: NodeId,
@@ -1128,7 +1129,7 @@ pub struct item {
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
 pub enum item_ {
     item_static(Ty, Mutability, @Expr),
-    item_fn(fn_decl, purity, AbiSet, Generics, Block),
+    item_fn(fn_decl, purity, AbiSet, Generics, Rc<Block>),
     item_mod(_mod),
     item_foreign_mod(foreign_mod),
     item_ty(Ty, Generics),
@@ -1138,7 +1139,7 @@ pub enum item_ {
     item_impl(Generics,
               Option<trait_ref>, // (optional) trait this impl implements
               Ty, // self
-              ~[@method]),
+              ~[@Method]),
     // a macro invocation (which includes macro definition)
     item_mac(mac),
 }
@@ -1165,7 +1166,7 @@ pub enum foreign_item_ {
 #[deriving(Eq, Encodable, Decodable,IterBytes)]
 pub enum inlined_item {
     ii_item(@item),
-    ii_method(DefId /* impl id */, bool /* is provided */, @method),
+    ii_method(DefId /* impl id */, bool /* is provided */, @Method),
     ii_foreign(@foreign_item),
 }
 

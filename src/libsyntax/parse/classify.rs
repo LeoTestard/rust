@@ -39,9 +39,7 @@ pub fn expr_requires_semi_to_be_stmt(e: @ast::Expr) -> bool {
 
 pub fn expr_is_simple_block(e: @ast::Expr) -> bool {
     match e.node {
-        ast::ExprBlock(
-            ast::Block { rules: ast::DefaultBlock, _ }
-        ) => true,
+        ast::ExprBlock(ref b) if b.borrow().rules == ast::DefaultBlock => true,
       _ => false
     }
 }

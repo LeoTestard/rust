@@ -1,4 +1,4 @@
-// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
+ext/format.rs// Copyright 2012 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -18,6 +18,7 @@ use parse::token;
 use opt_vec;
 use std::fmt::parse;
 use std::hashmap::{HashMap, HashSet};
+use std::rc::Rc;
 use std::vec;
 
 #[deriving(Eq)]
@@ -639,14 +640,14 @@ impl Context {
 
         // We did all the work of making sure that the arguments
         // structure is safe, so we can safely have an unsafe block.
-        let result = self.ecx.expr_block(ast::Block {
-           view_items: ~[],
-           stmts: ~[],
-           expr: Some(result),
-           id: ast::DUMMY_NODE_ID,
-           rules: ast::UnsafeBlock(ast::CompilerGenerated),
-           span: self.fmtsp,
-        });
+        let result = self.ecx.expr_block(Rc::new(ast::Block {
+            view_items: ~[],
+            stmts: ~[],
+            expr: Some(result),
+            id: ast::DUMMY_NODE_ID,
+            rules: ast::UnsafeBlock(ast::CompilerGenerated),
+            span: self.fmtsp,
+        }));
         let resname = self.ecx.ident_of("__args");
         lets.push(self.ecx.stmt_let(self.fmtsp, false, resname, result));
         let res = self.ecx.expr_ident(self.fmtsp, resname);

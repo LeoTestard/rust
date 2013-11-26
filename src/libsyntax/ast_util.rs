@@ -253,7 +253,7 @@ pub fn unguarded_pat(a: &Arm) -> Option<~[@Pat]> {
     }
 }
 
-pub fn public_methods(ms: ~[@method]) -> ~[@method] {
+pub fn public_methods(ms: ~[@Method]) -> ~[@Method] {
     do ms.move_iter().filter |m| {
         match m.vis {
             public => true,
@@ -283,7 +283,7 @@ pub fn trait_method_to_ty_method(method: &trait_method) -> TypeMethod {
 }
 
 pub fn split_trait_methods(trait_methods: &[trait_method])
-    -> (~[TypeMethod], ~[@method]) {
+    -> (~[TypeMethod], ~[@Method]) {
     let mut reqd = ~[];
     let mut provd = ~[];
     for trt_method in trait_methods.iter() {

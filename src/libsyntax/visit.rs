@@ -33,7 +33,7 @@ pub enum fn_kind<'self> {
     fk_item_fn(Ident, &'self Generics, purity, AbiSet),
 
     // fn foo(&self)
-    fk_method(Ident, &'self Generics, &'self method),
+    fk_method(Ident, &'self Generics, &'self Method),
 
     // @fn(x, y) { ... }
     fk_anon(ast::Sigil),
@@ -199,7 +199,7 @@ pub fn walk_item<E:Clone, V:Visitor<E>>(visitor: &mut V, item: &item, env: E) {
         item_fn(ref declaration, purity, abi, ref generics, ref body) => {
             visitor.visit_fn(&fk_item_fn(item.ident, generics, purity, abi),
                              declaration,
-                             body,
+                             body.borrow(),
                              item.span,
                              item.id,
                              env)
@@ -472,12 +472,12 @@ pub fn walk_fn_decl<E:Clone, V:Visitor<E>>(visitor: &mut V,
 // because it is not a default impl of any method, though I doubt that really
 // clarifies anything. - Niko
 pub fn walk_method_helper<E:Clone, V:Visitor<E>>(visitor: &mut V,
-                                    method: &method,
+                                    method: &Method,
                                     env: E) {
     visitor.visit_ident(method.span, method.ident, env.clone());
     visitor.visit_fn(&fk_method(method.ident, &method.generics, method),
                      &method.decl,
-                     &method.body,
+                     method.body.borrow(),
                      method.span,
                      method.id,
                      env)
@@ -656,19 +656,19 @@ pub fn walk_expr<E:Clone, V:Visitor<E>>(visitor: &mut V, expression: @Expr, env:
         }
         ExprIf(head_expression, ref if_block, optional_else) => {
             visitor.visit_expr(head_expression, env.clone());
-            visitor.visit_block(if_block, env.clone());
+            visitor.visit_block(if_block.borrow(), env.clone());
             walk_expr_opt(visitor, optional_else, env.clone())
         }
         ExprWhile(subexpression, ref block) => {
             visitor.visit_expr(subexpression, env.clone());
-            visitor.visit_block(block, env.clone())
+            visitor.visit_block(block.borrow(), env.clone())
         }
         ExprForLoop(pattern, subexpression, ref block, _) => {
             visitor.visit_pat(pattern, env.clone());
             visitor.visit_expr(subexpression, env.clone());
-            visitor.visit_block(block, env.clone())
+            visitor.visit_block(block.borrow(), env.clone())
         }
-        ExprLoop(ref block, _) => visitor.visit_block(block, env.clone()),
+        ExprLoop(ref block, _) => visitor.visit_block(block.borrow(), env.clone()),
         ExprMatch(subexpression, ref arms) => {
             visitor.visit_expr(subexpression, env.clone());
             for arm in arms.iter() {
@@ -678,7 +678,7 @@ pub fn walk_expr<E:Clone, V:Visitor<E>>(visitor: &mut V, expression: @Expr, env:
         ExprFnBlock(ref function_declaration, ref body) => {
             visitor.visit_fn(&fk_fn_block,
                              function_declaration,
-                             body,
+                             body.borrow(),
                              expression.span,
                              expression.id,
                              env.clone())
@@ -686,12 +686,12 @@ pub fn walk_expr<E:Clone, V:Visitor<E>>(visitor: &mut V, expression: @Expr, env:
         ExprProc(ref function_declaration, ref body) => {
             visitor.visit_fn(&fk_fn_block,
                              function_declaration,
-                             body,
+                             body.borrow(),
                              expression.span,
                              expression.id,
                              env.clone())
         }
-        ExprBlock(ref block) => visitor.visit_block(block, env.clone()),
+        ExprBlock(ref block) => visitor.visit_block(block.borrow(), env.clone()),
         ExprAssign(left_hand_expression, right_hand_expression) => {
             visitor.visit_expr(right_hand_expression, env.clone());
             visitor.visit_expr(left_hand_expression, env.clone())
@@ -738,5 +738,5 @@ pub fn walk_arm<E:Clone, V:Visitor<E>>(visitor: &mut V, arm: &Arm, env: E) {
         visitor.visit_pat(*pattern, env.clone())
     }
     walk_expr_opt(visitor, arm.guard, env.clone());
-    visitor.visit_block(&arm.body, env)
+    visitor.visit_block(arm.body.borrow(), env)
 }

@@ -18,6 +18,7 @@ use util::interner;
 use std::cast;
 use std::char;
 use std::local_data;
+use std::rc::Rc;
 
 #[deriving(Clone, Encodable, Decodable, Eq, IterBytes)]
 pub enum binop {
@@ -101,7 +102,7 @@ pub enum Token {
 /// For interpolation during macro expansion.
 pub enum nonterminal {
     nt_item(@ast::item),
-    nt_block(~ast::Block),
+    nt_block(Rc<ast::Block>),
     nt_stmt(@ast::Stmt),
     nt_pat( @ast::Pat),
     nt_expr(@ast::Expr),

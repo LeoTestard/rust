@@ -40,7 +40,7 @@ use ast::{item_mac, item_mod, item_struct, item_trait, item_ty, lit, lit_};
 use ast::{lit_bool, lit_float, lit_float_unsuffixed, lit_int, lit_char};
 use ast::{lit_int_unsuffixed, lit_nil, lit_str, lit_uint, Local};
 use ast::{MutImmutable, MutMutable, mac_, mac_invoc_tt, matcher, match_nonterminal};
-use ast::{match_seq, match_tok, method, mt, BiMul, Mutability};
+use ast::{match_seq, match_tok, Method, mt, BiMul, Mutability};
 use ast::{named_field, UnNeg, noreturn, UnNot, Pat, PatBox, PatEnum};
 use ast::{PatIdent, PatLit, PatRange, PatRegion, PatStruct};
 use ast::{PatTup, PatUniq, PatWild, PatWildMulti, private};
@@ -82,6 +82,7 @@ use opt_vec;
 use opt_vec::OptVec;
 
 use std::hashmap::HashSet;
+use std::rc::Rc;
 use std::util;
 use std::vec;
 
@@ -247,8 +248,8 @@ macro_rules! maybe_whole (
                 _ => None
             };
             match __found__ {
-                Some(INTERPOLATED(token::$constructor(ref x))) => {
-                    return (~[], (**x).clone())
+                Some(INTERPOLATED(token::$constructor(x))) => {
+                    return (~[], x.clone())
                 }
                 _ => {}
             }
@@ -1084,7 +1085,7 @@ impl Parser {
                 let (inner_attrs, body) =
                     p.parse_inner_attrs_and_block();
                 let attrs = vec::append(attrs, inner_attrs);
-                provided(@ast::method {
+                provided(@ast::Method {
                     ident: ident,
                     attrs: attrs,
                     generics: generics,
@@ -1776,21 +1777,21 @@ impl Parser {
         } else if *self.token == token::LBRACE {
             self.bump();
             let blk = self.parse_block_tail(lo, DefaultBlock);
-            return self.mk_expr(blk.span.lo, blk.span.hi,
+            return self.mk_expr(blk.borrow().span.lo, blk.borrow().span.hi,
                                  ExprBlock(blk));
         } else if token::is_bar(&*self.token) {
             return self.parse_lambda_expr();
         } else if self.eat_keyword(keywords::Proc) {
             let decl = self.parse_proc_decl();
             let body = self.parse_expr();
-            let fakeblock = ast::Block {
+            let fakeblock = Rc::new(ast::Block {
                 view_items: ~[],
                 stmts: ~[],
                 expr: Some(body),
                 id: ast::DUMMY_NODE_ID,
                 rules: DefaultBlock,
                 span: body.span,
-            };
+            });
 
             return self.mk_expr(lo, body.span.hi, ExprProc(decl, fakeblock));
         } else if self.eat_keyword(keywords::Self) {
@@ -1962,7 +1963,9 @@ impl Parser {
                             -> @Expr {
         self.expect(&token::LBRACE);
         let blk = self.parse_block_tail(lo, blk_mode);
-        return self.mk_expr(blk.span.lo, blk.span.hi, ExprBlock(blk));
+        return self.mk_expr(blk.borrow().span.lo,
+                            blk.borrow().span.hi,
+                            ExprBlock(blk));
     }
 
     // parse a.b or a(13) or a[4] or just a
@@ -2424,7 +2427,7 @@ impl Parser {
         let cond = self.parse_expr();
         let thn = self.parse_block();
         let mut els: Option<@Expr> = None;
-        let mut hi = thn.span.hi;
+        let mut hi = thn.borrow().span.hi;
         if self.eat_keyword(keywords::Else) {
             let elexpr = self.parse_else_expr();
             els = Some(elexpr);
@@ -2458,7 +2461,9 @@ impl Parser {
             },
             || {
                 let blk = self.parse_block();
-                self.mk_expr(blk.span.lo, blk.span.hi, ExprBlock(blk))
+                self.mk_expr(blk.borrow().span.lo,
+                             blk.borrow().span.hi,
+                             ExprBlock(blk))
             })
     }
 
@@ -2478,14 +2483,14 @@ impl Parser {
         let lo = self.last_span.lo;
         let decl = parse_decl();
         let body = parse_body();
-        let fakeblock = ast::Block {
+        let fakeblock = Rc::new(ast::Block {
             view_items: ~[],
             stmts: ~[],
             expr: Some(body),
             id: ast::DUMMY_NODE_ID,
             rules: DefaultBlock,
             span: body.span,
-        };
+        });
 
         return self.mk_expr(lo, body.span.hi,
                             ExprFnBlock(decl, fakeblock));
@@ -2496,7 +2501,9 @@ impl Parser {
             return self.parse_if_expr();
         } else {
             let blk = self.parse_block();
-            return self.mk_expr(blk.span.lo, blk.span.hi, ExprBlock(blk));
+            return self.mk_expr(blk.borrow().span.lo,
+                                blk.borrow().span.hi,
+                                ExprBlock(blk));
         }
     }
 
@@ -2591,7 +2598,7 @@ impl Parser {
         let lo = self.last_span.lo;
         let cond = self.parse_expr();
         let body = self.parse_block();
-        let hi = body.span.hi;
+        let hi = body.borrow().span.hi;
         return self.mk_expr(lo, hi, ExprWhile(cond, body));
     }
 
@@ -2606,7 +2613,7 @@ impl Parser {
             // This is a loop body
             let lo = self.last_span.lo;
             let body = self.parse_block();
-            let hi = body.span.hi;
+            let hi = body.borrow().span.hi;
             return self.mk_expr(lo, hi, ExprLoop(body, opt_ident));
         } else {
             // This is an obsolete 'continue' expression
@@ -2660,14 +2667,14 @@ impl Parser {
                 self.eat(&token::COMMA);
             }
 
-            let blk = ast::Block {
+            let blk = Rc::new(ast::Block {
                 view_items: ~[],
                 stmts: ~[],
                 expr: Some(expr),
                 id: ast::DUMMY_NODE_ID,
                 rules: DefaultBlock,
                 span: expr.span,
-            };
+            });
 
             arms.push(ast::Arm { pats: pats, guard: guard, body: blk });
         }
@@ -3284,8 +3291,8 @@ impl Parser {
     }
 
     // parse a block. No inner attrs are allowed.
-    pub fn parse_block(&self) -> Block {
-        maybe_whole!(deref self, nt_block);
+    pub fn parse_block(&self) -> Rc<Block> {
+        maybe_whole!(self, nt_block);
 
         let lo = self.span.lo;
         if self.eat_keyword(keywords::Unsafe) {
@@ -3298,7 +3305,7 @@ impl Parser {
 
     // parse a block. Inner attrs are allowed.
     fn parse_inner_attrs_and_block(&self)
-        -> (~[Attribute], Block) {
+        -> (~[Attribute], Rc<Block>) {
 
         maybe_whole!(pair_empty self, nt_block);
 
@@ -3316,13 +3323,13 @@ impl Parser {
     // I guess that also means "already parsed the 'impure'" if
     // necessary, and this should take a qualifier.
     // some blocks start with "#{"...
-    fn parse_block_tail(&self, lo: BytePos, s: BlockCheckMode) -> Block {
+    fn parse_block_tail(&self, lo: BytePos, s: BlockCheckMode) -> Rc<Block> {
         self.parse_block_tail_(lo, s, ~[])
     }
 
     // parse the rest of a block expression or function body
     fn parse_block_tail_(&self, lo: BytePos, s: BlockCheckMode,
-                         first_item_attrs: ~[Attribute]) -> Block {
+                         first_item_attrs: ~[Attribute]) -> Rc<Block> {
         let mut stmts = ~[];
         let mut expr = None;
 
@@ -3433,14 +3440,14 @@ impl Parser {
 
         let hi = self.span.hi;
         self.bump();
-        ast::Block {
+        Rc::new(ast::Block {
             view_items: view_items,
             stmts: stmts,
             expr: expr,
             id: ast::DUMMY_NODE_ID,
             rules: s,
             span: mk_sp(lo, hi),
-        }
+        })
     }
 
     fn parse_optional_purity(&self) -> ast::purity {
@@ -3872,7 +3879,7 @@ impl Parser {
     }
 
     // parse a method in a trait impl
-    fn parse_method(&self) -> @method {
+    fn parse_method(&self) -> @Method {
         let attrs = self.parse_outer_attributes();
         let lo = self.span.lo;
 
@@ -3885,9 +3892,9 @@ impl Parser {
         };
 
         let (inner_attrs, body) = self.parse_inner_attrs_and_block();
-        let hi = body.span.hi;
+        let hi = body.borrow().span.hi;
         let attrs = vec::append(attrs, inner_attrs);
-        @ast::method {
+        @ast::Method {
             ident: ident,
             attrs: attrs,
             generics: generics,

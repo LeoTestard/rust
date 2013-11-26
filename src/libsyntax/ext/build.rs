@@ -18,6 +18,7 @@ use ext::quote::rt::*;
 use fold;
 use opt_vec;
 use opt_vec::OptVec;
+use std::rc::Rc;
 
 pub struct Field {
     ident: ast::Ident,
@@ -83,12 +84,13 @@ pub trait AstBuilder {
                       -> @ast::Stmt;
 
     // blocks
-    fn block(&self, span: Span, stmts: ~[@ast::Stmt], expr: Option<@ast::Expr>) -> ast::Block;
-    fn block_expr(&self, expr: @ast::Expr) -> ast::Block;
+    fn block(&self, span: Span, stmts: ~[@ast::Stmt], 
+             expr: Option<@ast::Expr>) -> Rc<ast::Block>;
+    fn block_expr(&self, expr: @ast::Expr) -> Rc<ast::Block>;
     fn block_all(&self, span: Span,
                  view_items: ~[ast::view_item],
                  stmts: ~[@ast::Stmt],
-                 expr: Option<@ast::Expr>) -> ast::Block;
+                 expr: Option<@ast::Expr>) -> Rc<ast::Block>;
 
     // expressions
     fn expr(&self, span: Span, node: ast::Expr_) -> @ast::Expr;
@@ -112,7 +114,7 @@ pub trait AstBuilder {
     fn expr_method_call(&self, span: Span,
                         expr: @ast::Expr, ident: ast::Ident,
                         args: ~[@ast::Expr]) -> @ast::Expr;
-    fn expr_block(&self, b: ast::Block) -> @ast::Expr;
+    fn expr_block(&self, b: Rc<ast::Block>) -> @ast::Expr;
     fn expr_cast(&self, sp: Span, expr: @ast::Expr, ty: ast::Ty) -> @ast::Expr;
 
     fn field_imm(&self, span: Span, name: Ident, e: @ast::Expr) -> ast::Field;
@@ -159,11 +161,14 @@ pub trait AstBuilder {
     fn expr_if(&self, span: Span,
                cond: @ast::Expr, then: @ast::Expr, els: Option<@ast::Expr>) -> @ast::Expr;
 
-    fn lambda_fn_decl(&self, span: Span, fn_decl: ast::fn_decl, blk: ast::Block) -> @ast::Expr;
+    fn lambda_fn_decl(&self, span: Span, fn_decl: ast::fn_decl,
+                      blk: Rc<ast::Block>) -> @ast::Expr;
 
-    fn lambda(&self, span: Span, ids: ~[ast::Ident], blk: ast::Block) -> @ast::Expr;
-    fn lambda0(&self, span: Span, blk: ast::Block) -> @ast::Expr;
-    fn lambda1(&self, span: Span, blk: ast::Block, ident: ast::Ident) -> @ast::Expr;
+    fn lambda(&self, span: Span, ids: ~[ast::Ident],
+              blk: Rc<ast::Block>) -> @ast::Expr;
+    fn lambda0(&self, span: Span, blk: Rc<ast::Block>) -> @ast::Expr;
+    fn lambda1(&self, span: Span, blk: Rc<ast::Block>, ident: ast::Ident)
+               -> @ast::Expr;
 
     fn lambda_expr(&self, span: Span, ids: ~[ast::Ident], blk: @ast::Expr) -> @ast::Expr;
     fn lambda_expr_0(&self, span: Span, expr: @ast::Expr) -> @ast::Expr;
@@ -187,13 +192,13 @@ pub trait AstBuilder {
                     inputs: ~[ast::arg],
                     output: ast::Ty,
                     generics: Generics,
-                    body: ast::Block) -> @ast::item;
+                    body: Rc<ast::Block>) -> @ast::item;
     fn item_fn(&self,
                span: Span,
                name: Ident,
                inputs: ~[ast::arg],
                output: ast::Ty,
-               body: ast::Block) -> @ast::item;
+               body: Rc<ast::Block>) -> @ast::item;
 
     fn variant(&self, span: Span, name: Ident, tys: ~[ast::Ty]) -> ast::variant;
     fn item_enum_poly(&self,
@@ -438,26 +443,27 @@ impl AstBuilder for @ExtCtxt {
         @respan(sp, ast::StmtDecl(@decl, ast::DUMMY_NODE_ID))
     }
 
-    fn block(&self, span: Span, stmts: ~[@ast::Stmt], expr: Option<@Expr>) -> ast::Block {
+    fn block(&self, span: Span, stmts: ~[@ast::Stmt], 
+             expr: Option<@Expr>) -> Rc<ast::Block> {
         self.block_all(span, ~[], stmts, expr)
     }
 
-    fn block_expr(&self, expr: @ast::Expr) -> ast::Block {
+    fn block_expr(&self, expr: @ast::Expr) -> Rc<ast::Block> {
         self.block_all(expr.span, ~[], ~[], Some(expr))
     }
     fn block_all(&self,
                  span: Span,
                  view_items: ~[ast::view_item],
                  stmts: ~[@ast::Stmt],
-                 expr: Option<@ast::Expr>) -> ast::Block {
-           ast::Block {
+                 expr: Option<@ast::Expr>) -> Rc<ast::Block> {
+           Rc::new(ast::Block {
                view_items: view_items,
                stmts: stmts,
                expr: expr,
                id: ast::DUMMY_NODE_ID,
                rules: ast::DefaultBlock,
                span: span,
-           }
+           })
     }
 
     fn expr(&self, span: Span, node: ast::Expr_) -> @ast::Expr {
@@ -525,8 +531,8 @@ impl AstBuilder for @ExtCtxt {
         self.expr(span,
                   ast::ExprMethodCall(ast::DUMMY_NODE_ID, expr, ident, ~[], args, ast::NoSugar))
     }
-    fn expr_block(&self, b: ast::Block) -> @ast::Expr {
-        self.expr(b.span, ast::ExprBlock(b))
+    fn expr_block(&self, b: Rc<ast::Block>) -> @ast::Expr {
+        self.expr(b.borrow().span, ast::ExprBlock(b))
     }
     fn field_imm(&self, span: Span, name: Ident, e: @ast::Expr) -> ast::Field {
         ast::Field { ident: respan(span, name), expr: e, span: span }
@@ -673,23 +679,26 @@ impl AstBuilder for @ExtCtxt {
         self.expr(span, ast::ExprIf(cond, self.block_expr(then), els))
     }
 
-    fn lambda_fn_decl(&self, span: Span, fn_decl: ast::fn_decl, blk: ast::Block) -> @ast::Expr {
+    fn lambda_fn_decl(&self, span: Span, fn_decl: ast::fn_decl,
+                      blk: Rc<ast::Block>) -> @ast::Expr {
         self.expr(span, ast::ExprFnBlock(fn_decl, blk))
     }
-    fn lambda(&self, span: Span, ids: ~[ast::Ident], blk: ast::Block) -> @ast::Expr {
+    fn lambda(&self, span: Span, ids: ~[ast::Ident], blk: Rc<ast::Block>)
+              -> @ast::Expr {
         let fn_decl = self.fn_decl(
             ids.map(|id| self.arg(span, *id, self.ty_infer(span))),
             self.ty_infer(span));
 
         self.expr(span, ast::ExprFnBlock(fn_decl, blk))
     }
-    fn lambda0(&self, _span: Span, blk: ast::Block) -> @ast::Expr {
-        let blk_e = self.expr(blk.span, ast::ExprBlock(blk.clone()));
+    fn lambda0(&self, _span: Span, blk: Rc<ast::Block>) -> @ast::Expr {
+        let blk_e = self.expr(blk.borrow().span, ast::ExprBlock(blk));
         quote_expr!(*self, || $blk_e )
     }
 
-    fn lambda1(&self, _span: Span, blk: ast::Block, ident: ast::Ident) -> @ast::Expr {
-        let blk_e = self.expr(blk.span, ast::ExprBlock(blk.clone()));
+    fn lambda1(&self, _span: Span, blk: Rc<ast::Block>, ident: ast::Ident)
+               -> @ast::Expr {
+        let blk_e = self.expr(blk.borrow().span, ast::ExprBlock(blk));
         quote_expr!(*self, |$ident| $blk_e )
     }
 
@@ -750,7 +759,7 @@ impl AstBuilder for @ExtCtxt {
                     inputs: ~[ast::arg],
                     output: ast::Ty,
                     generics: Generics,
-                    body: ast::Block) -> @ast::item {
+                    body: Rc<ast::Block>) -> @ast::item {
         self.item(span,
                   name,
                   ~[],
@@ -766,7 +775,7 @@ impl AstBuilder for @ExtCtxt {
                name: Ident,
                inputs: ~[ast::arg],
                output: ast::Ty,
-               body: ast::Block
+               body: Rc<ast::Block>
               ) -> @ast::item {
         self.item_fn_poly(
             span,

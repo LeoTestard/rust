@@ -530,7 +530,7 @@ pub fn print_item(s: @ps, item: &ast::item) {
             item.vis
         );
         word(s.s, " ");
-        print_block_with_attrs(s, body, item.attrs);
+        print_block_with_attrs(s, body.borrow(), item.attrs);
       }
       ast::item_mod(ref _mod) => {
         head(s, visibility_qualified(item.vis, "mod"));
@@ -838,7 +838,7 @@ pub fn print_trait_method(s: @ps, m: &ast::trait_method) {
     }
 }
 
-pub fn print_method(s: @ps, meth: &ast::method) {
+pub fn print_method(s: @ps, meth: &ast::Method) {
     hardbreak_if_not_bol(s);
     maybe_print_comment(s, meth.span.lo);
     print_outer_attributes(s, meth.attrs);
@@ -846,7 +846,7 @@ pub fn print_method(s: @ps, meth: &ast::method) {
              meth.ident, &meth.generics, Some(meth.explicit_self.node),
              meth.vis);
     word(s.s, " ");
-    print_block_with_attrs(s, &meth.body, meth.attrs);
+    print_block_with_attrs(s, meth.body.borrow(), meth.attrs);
 }
 
 pub fn print_outer_attributes(s: @ps, attrs: &[ast::Attribute]) {
@@ -1001,7 +1001,7 @@ pub fn print_if(s: @ps, test: &ast::Expr, blk: &ast::Block,
                 word(s.s, " else if ");
                 print_expr(s, i);
                 space(s.s);
-                print_block(s, t);
+                print_block(s, t.borrow());
                 do_else(s, e);
               }
               // "final else"
@@ -1009,7 +1009,7 @@ pub fn print_if(s: @ps, test: &ast::Expr, blk: &ast::Block,
                 cbox(s, indent_unit - 1u);
                 ibox(s, 0u);
                 word(s.s, " else ");
-                print_block(s, b);
+                print_block(s, b.borrow());
               }
               // BLEAH, constraints would be great here
               _ => {
@@ -1227,13 +1227,13 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         print_type(s, ty);
       }
       ast::ExprIf(test, ref blk, elseopt) => {
-        print_if(s, test, blk, elseopt, false);
+        print_if(s, test, blk.borrow(), elseopt, false);
       }
       ast::ExprWhile(test, ref blk) => {
         head(s, "while");
         print_expr(s, test);
         space(s.s);
-        print_block(s, blk);
+        print_block(s, blk.borrow());
       }
       ast::ExprForLoop(pat, iter, ref blk, opt_ident) => {
         for ident in opt_ident.iter() {
@@ -1247,7 +1247,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         word_space(s, "in");
         print_expr(s, iter);
         space(s.s);
-        print_block(s, blk);
+        print_block(s, blk.borrow());
       }
       ast::ExprLoop(ref blk, opt_ident) => {
         for ident in opt_ident.iter() {
@@ -1257,7 +1257,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         }
         head(s, "loop");
         space(s.s);
-        print_block(s, blk);
+        print_block(s, blk.borrow());
       }
       ast::ExprMatch(expr, ref arms) => {
         cbox(s, indent_unit);
@@ -1291,18 +1291,19 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
 
             // Extract the expression from the extra block the parser adds
             // in the case of foo => expr
-            if arm.body.view_items.is_empty() &&
-                arm.body.stmts.is_empty() &&
-                arm.body.rules == ast::DefaultBlock &&
-                arm.body.expr.is_some()
+            let body = arm.body.borrow();
+            if body.view_items.is_empty() &&
+                body.stmts.is_empty() &&
+                body.rules == ast::DefaultBlock &&
+                body.expr.is_some()
             {
-                match arm.body.expr {
+                match body.expr {
                     Some(expr) => {
                         match expr.node {
                             ast::ExprBlock(ref blk) => {
                                 // the block will close the pattern's ibox
                                 print_block_unclosed_indent(
-                                    s, blk, indent_unit);
+                                    s, blk.borrow(), indent_unit);
                             }
                             _ => {
                                 end(s); // close the ibox for the pattern
@@ -1319,7 +1320,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
                 }
             } else {
                 // the block will close the pattern's ibox
-                print_block_unclosed_indent(s, &arm.body, indent_unit);
+                print_block_unclosed_indent(s, body, indent_unit);
             }
         }
         bclose_(s, expr.span, indent_unit);
@@ -1333,16 +1334,17 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         print_fn_block_args(s, decl);
         space(s.s);
         // }
-        assert!(body.stmts.is_empty());
-        assert!(body.expr.is_some());
+        let b = body.borrow();
+        assert!(b.stmts.is_empty());
+        assert!(b.expr.is_some());
         // we extract the block, so as not to create another set of boxes
-        match body.expr.unwrap().node {
+        match b.expr.unwrap().node {
             ast::ExprBlock(ref blk) => {
-                print_block_unclosed(s, blk);
+                print_block_unclosed(s, blk.borrow());
             }
             _ => {
                 // this is a bare expression
-                print_expr(s, body.expr.unwrap());
+                print_expr(s, b.expr.unwrap());
                 end(s); // need to close a box
             }
         }
@@ -1360,16 +1362,17 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         print_proc_args(s, decl);
         space(s.s);
         // }
-        assert!(body.stmts.is_empty());
-        assert!(body.expr.is_some());
+        let b = body.borrow();
+        assert!(b.stmts.is_empty());
+        assert!(b.expr.is_some());
         // we extract the block, so as not to create another set of boxes
-        match body.expr.unwrap().node {
+        match b.expr.unwrap().node {
             ast::ExprBlock(ref blk) => {
-                print_block_unclosed(s, blk);
+                print_block_unclosed(s, blk.borrow());
             }
             _ => {
                 // this is a bare expression
-                print_expr(s, body.expr.unwrap());
+                print_expr(s, b.expr.unwrap());
                 end(s); // need to close a box
             }
         }
@@ -1386,7 +1389,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         cbox(s, indent_unit);
         // head-box, will be closed by print-block after {
         ibox(s, 0u);
-        print_block(s, blk);
+        print_block(s, blk.borrow());
       }
       ast::ExprAssign(lhs, rhs) => {
         print_expr(s, lhs);

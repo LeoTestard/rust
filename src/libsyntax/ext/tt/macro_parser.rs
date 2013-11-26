@@ -432,7 +432,7 @@ pub fn parse_nt(p: &Parser, name: &str) -> nonterminal {
         Some(i) => token::nt_item(i),
         None => p.fatal("expected an item keyword")
       },
-      "block" => token::nt_block(~p.parse_block()),
+      "block" => token::nt_block(p.parse_block()),
       "stmt" => token::nt_stmt(p.parse_stmt(~[])),
       "pat" => token::nt_pat(p.parse_pat()),
       "expr" => token::nt_expr(p.parse_expr()),

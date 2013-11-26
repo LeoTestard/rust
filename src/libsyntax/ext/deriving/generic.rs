@@ -347,7 +347,7 @@ impl<'self> TraitDef<'self> {
      */
     fn create_derived_impl(&self, cx: @ExtCtxt, trait_span: Span,
                            type_ident: Ident, generics: &Generics,
-                           methods: ~[@ast::method]) -> @ast::item {
+                           methods: ~[@ast::Method]) -> @ast::item {
         let trait_path = self.path.to_path(cx, trait_span, type_ident, generics);
 
         let mut trait_generics = self.generics.to_generics(cx, trait_span, type_ident, generics);
@@ -542,7 +542,7 @@ impl<'self> MethodDef<'self> {
                      generics: &Generics,
                      explicit_self: ast::explicit_self,
                      arg_types: ~[(Ident, ast::Ty)],
-                     body: @Expr) -> @ast::method {
+                     body: @Expr) -> @ast::Method {
         // create the generics that aren't for Self
         let fn_generics = self.generics.to_generics(cx, trait_span, type_ident, generics);
 
@@ -563,7 +563,7 @@ impl<'self> MethodDef<'self> {
         };
 
         // Create the method.
-        @ast::method {
+        @ast::Method {
             ident: method_ident,
             attrs: attrs,
             generics: fn_generics,

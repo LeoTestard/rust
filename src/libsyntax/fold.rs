@@ -13,6 +13,7 @@ use ast;
 use codemap::{respan, Span, Spanned};
 use parse::token;
 use opt_vec::OptVec;
+use std::rc::Rc;
 
 // We may eventually want to be able to fold over type parameters, too.
 pub trait ast_fold {
@@ -139,15 +140,15 @@ pub trait ast_fold {
         noop_fold_type_method(m, self)
     }
 
-    fn fold_method(&self, m: @method) -> @method {
-        @ast::method {
+    fn fold_method(&self, m: @Method) -> @Method {
+        @ast::Method {
             ident: self.fold_ident(m.ident),
             attrs: m.attrs.map(|a| fold_attribute_(*a, self)),
             generics: fold_generics(&m.generics, self),
             explicit_self: self.fold_explicit_self(&m.explicit_self),
             purity: m.purity,
             decl: fold_fn_decl(&m.decl, self),
-            body: self.fold_block(&m.body),
+            body: self.fold_block(m.body.borrow()),
             id: self.new_id(m.id),
             span: self.new_span(m.span),
             self_id: self.new_id(m.self_id),
@@ -155,7 +156,7 @@ pub trait ast_fold {
         }
     }
 
-    fn fold_block(&self, b: &Block) -> Block {
+    fn fold_block(&self, b: &Block) -> Rc<Block> {
         noop_fold_block(b, self)
     }
 
@@ -167,7 +168,7 @@ pub trait ast_fold {
         Arm {
             pats: a.pats.map(|x| self.fold_pat(*x)),
             guard: a.guard.map(|x| self.fold_expr(x)),
-            body: self.fold_block(&a.body),
+            body: self.fold_block(a.body.borrow()),
         }
     }
 
@@ -616,7 +617,7 @@ fn fold_variant_arg_<T:ast_fold>(va: &variant_arg, folder: &T)
     }
 }
 
-pub fn noop_fold_block<T:ast_fold>(b: &Block, folder: &T) -> Block {
+pub fn noop_fold_block<T:ast_fold>(b: &Block, folder: &T) -> Rc<Block> {
     let view_items = b.view_items.map(|x| folder.fold_view_item(x));
     let mut stmts = ~[];
     for stmt in b.stmts.iter() {
@@ -625,14 +626,14 @@ pub fn noop_fold_block<T:ast_fold>(b: &Block, folder: &T) -> Block {
             Some(stmt) => stmts.push(stmt)
         }
     }
-    ast::Block {
+    Rc::new(ast::Block {
         view_items: view_items,
         stmts: stmts,
         expr: b.expr.map(|x| folder.fold_expr(x)),
         id: folder.new_id(b.id),
         rules: b.rules,
         span: folder.new_span(b.span),
-    }
+    })
 }
 
 pub fn noop_fold_item_underscore<T:ast_fold>(i: &item_, folder: &T) -> item_ {
@@ -646,7 +647,7 @@ pub fn noop_fold_item_underscore<T:ast_fold>(i: &item_, folder: &T) -> item_ {
                 purity,
                 abi,
                 fold_generics(generics, folder),
-                folder.fold_block(body)
+                folder.fold_block(body.borrow())
             )
         }
         item_mod(ref m) => item_mod(folder.fold_mod(m)),
@@ -787,20 +788,20 @@ pub fn noop_fold_expr<T:ast_fold>(e: @ast::Expr, folder: &T) -> @ast::Expr {
         ExprAddrOf(m, ohs) => ExprAddrOf(m, folder.fold_expr(ohs)),
         ExprIf(cond, ref tr, fl) => {
             ExprIf(folder.fold_expr(cond),
-                   folder.fold_block(tr),
+                   folder.fold_block(tr.borrow()),
                    fl.map(|x| folder.fold_expr(x)))
         }
         ExprWhile(cond, ref body) => {
-            ExprWhile(folder.fold_expr(cond), folder.fold_block(body))
+            ExprWhile(folder.fold_expr(cond), folder.fold_block(body.borrow()))
         }
         ExprForLoop(pat, iter, ref body, ref maybe_ident) => {
             ExprForLoop(folder.fold_pat(pat),
                         folder.fold_expr(iter),
-                        folder.fold_block(body),
+                        folder.fold_block(body.borrow()),
                         maybe_ident.map(|i| folder.fold_ident(i)))
         }
         ExprLoop(ref body, opt_ident) => {
-            ExprLoop(folder.fold_block(body),
+            ExprLoop(folder.fold_block(body.borrow()),
                      opt_ident.map(|x| folder.fold_ident(x)))
         }
         ExprMatch(expr, ref arms) => {
@@ -810,13 +811,13 @@ pub fn noop_fold_expr<T:ast_fold>(e: @ast::Expr, folder: &T) -> @ast::Expr {
         ExprFnBlock(ref decl, ref body) => {
             ExprFnBlock(
                 fold_fn_decl(decl, folder),
-                folder.fold_block(body)
+                folder.fold_block(body.borrow())
             )
         }
         ExprProc(ref decl, ref body) => {
-            ExprProc(fold_fn_decl(decl, folder), folder.fold_block(body))
+            ExprProc(fold_fn_decl(decl, folder), folder.fold_block(body.borrow()))
         }
-        ExprBlock(ref blk) => ExprBlock(folder.fold_block(blk)),
+        ExprBlock(ref blk) => ExprBlock(folder.fold_block(blk.borrow())),
         ExprAssign(el, er) => {
             ExprAssign(folder.fold_expr(el), folder.fold_expr(er))
         }

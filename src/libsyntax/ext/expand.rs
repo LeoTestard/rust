@@ -29,6 +29,7 @@ use parse::token::{fresh_mark, fresh_name, ident_to_str, intern};
 use visit;
 use visit::Visitor;
 
+use std::rc::Rc;
 use std::vec;
 
 pub fn expand_expr(extsbox: @mut SyntaxEnv,
@@ -134,7 +135,7 @@ pub fn expand_expr(extsbox: @mut SyntaxEnv,
             // Expand any interior macros etc.
             // NB: we don't fold pats yet. Curious.
             let src_expr = fld.fold_expr(src_expr).clone();
-            let src_loop_block = fld.fold_block(src_loop_block).clone();
+            let src_loop_block = fld.fold_block(src_loop_block.borrow()).clone();
 
             let span = e.span;
 
@@ -666,7 +667,7 @@ pub fn expand_block(extsbox: @mut SyntaxEnv,
                     _: @ExtCtxt,
                     blk: &Block,
                     fld: &MacroExpander)
-                    -> Block {
+                    -> Rc<Block> {
     // see note below about treatment of exts table
     with_exts_frame!(extsbox,false,
                      expand_block_elts(*extsbox, blk, fld))
@@ -674,7 +675,7 @@ pub fn expand_block(extsbox: @mut SyntaxEnv,
 
 // expand the elements of a block.
 pub fn expand_block_elts(exts: SyntaxEnv, b: &Block, fld: &MacroExpander)
-                         -> Block {
+                         -> Rc<Block> {
     let block_info = get_block_info(exts);
     let pending_renames = block_info.pending_renames;
     let rename_fld = renames_to_fold(pending_renames);
@@ -687,14 +688,14 @@ pub fn expand_block_elts(exts: SyntaxEnv, b: &Block, fld: &MacroExpander)
         }
     }
     let new_expr = b.expr.map(|x| fld.fold_expr(rename_fld.fold_expr(x)));
-    Block{
+    Rc::new(Block{
         view_items: new_view_items,
         stmts: new_stmts,
         expr: new_expr,
         id: fld.new_id(b.id),
         rules: b.rules,
         span: b.span,
-    }
+    })
 }
 
 // rename_fold should never return "None".
@@ -1039,7 +1040,7 @@ impl ast_fold for MacroExpander {
                     self)
     }
 
-    fn fold_block(&self, block: &ast::Block) -> ast::Block {
+    fn fold_block(&self, block: &ast::Block) -> Rc<ast::Block> {
         expand_block(self.extsbox,
                      self.cx,
                      block,

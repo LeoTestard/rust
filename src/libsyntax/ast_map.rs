@@ -110,7 +110,7 @@ pub enum ast_node {
     node_foreign_item(@foreign_item, AbiSet, visibility, @path),
     node_trait_method(@trait_method, DefId /* trait did */,
                       @path /* path to the trait */),
-    node_method(@method, DefId /* impl did */, @path /* path to the impl */),
+    node_method(@Method, DefId /* impl did */, @path /* path to the impl */),
     node_variant(variant, @item, @path),
     node_expr(@Expr),
     node_stmt(@Stmt),
@@ -157,7 +157,7 @@ impl Ctx {
     fn map_method(&mut self,
                   impl_did: DefId,
                   impl_path: @path,
-                  m: @method,
+                  m: @Method,
                   is_provided: bool) {
         let entry = if is_provided {
             node_trait_method(@provided(m), impl_did, impl_path)
