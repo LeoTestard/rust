@@ -1,0 +1,58 @@
+Interesting places to look at:
+    
+    - macro_rules exported from extern crates are inserted into the syntax env
+      frame of the root module at libsyntax/ext/expand.rs:1374.
+    - macro_rules! that are defined in a #[macro_use] module are inserted
+      into the syntax env frame of their scope (the expander keeps a frame per
+      module, basically), that is the frame of the closest enclosing module
+      that doesn't have #[macro_rules] on it (or the root module). This
+      happens in libsyntax/ext/base.rs:922.
+    - syntax extensions imported from plugins are inserted into the root module
+      frame at libsyntax/ext/expand.rs:1378.
+
+All of this leads libsyntax/ext/base.rs:922. It's here that local macros,
+imported macros, and plugins are registered in a frame (the root module for
+plugins and imported macros, the smallest enclosing module for local macros).
+We can simply check that there isn't already a macro with such a name...
+
+Now the thing is that checking for duplicates is not as simple as checking for
+duplicates in `use` because `use` statements all appear at the same position
+and have an effect on the same scope. It's not the case for macro_use:
+
+use foo::baz;
+// a lot of code here but nothing that can use baz.
+use bar::baz;
+// now foo::baz is truly invisible.
+
+#[macro_use] mod foo { macro_rules baz!() { ... } }
+// some code
+baz!()
+#[macro_use] mod bar { macro_rules baz!() { ... } }
+// fine?
+baz!()
+
+It's in fact more similar to variable shadowing.
+
+let baz = ...;
+something(baz);
+let baz = ...;
+
+Note for 22290: 
+
+    - Renaming macros imported from extern crates is easy. Everything happens
+      in librustc_metadata/macro_import.rs, in visit_item to extract the values
+      of the meta items, and in load_macros to apply them.
+    - Renaming local macros isn't hard in principle but in practice it requires
+      to store the list of renamings on the frame of each module in SyntaxEnv
+      and, when inserting a macro into the environment, instead of just looking
+      for the smallest enclosing module, do this:
+        - Find either the smallest enclosing module that either doesn't have
+          macro_use (or is the root module) *OR* have a macro_use with a
+          renaming for that specific mcaro.
+        - If we are in the first case (no #[macro_use] or root), just
+          insert the macro as usual.
+        - If not, it means we have a renaming foo="bar". Then do the
+          following:
+            - Insert into this frame the macro with its original name
+            - Repeat the operation with the parent modules, but with
+              the macro renamed.
